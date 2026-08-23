@@ -1,0 +1,30 @@
+# Build directory
+build/
+bin/
+out/
+.cache/
+
+# CMake generated files
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+*.cmake
+
+# Compiled executables and objects
+*.exe
+*.obj
+*.o
+*.a
+*.lib
+*.dll
+
+# IDE and Editor directories
+.vscode/
+.idea/
+.clang-format-ignore
+*.user
+
+# OS generated files
+Thumbs.db
+[Dd]esktop.ini
