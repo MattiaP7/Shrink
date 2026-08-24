@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(ImgCompressor LANGUAGES CXX C)
+project(shrink LANGUAGES CXX C)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -8,13 +8,39 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Dipendenze MSYS2 UCRT64
-find_package(cxxopts REQUIRED)
-find_package(spdlog REQUIRED)
-find_package(WebP REQUIRED)
-
-# Gestione libreria header-only stb via FetchContent
+# ============================================================================
+# FetchContent per gestire TUTTE le dipendenze esterne
+# ============================================================================
 include(FetchContent)
+
+# ---- libwebp ----
+# Build libwebp da sorgenti con opzioni ottimizzate
+FetchContent_Declare(
+    libwebp
+    GIT_REPOSITORY https://github.com/webmproject/libwebp.git
+    GIT_TAG        v1.3.2
+    PATCH_COMMAND ${CMAKE_COMMAND} -E echo "libwebp declared"
+)
+
+FetchContent_MakeAvailable(libwebp)
+
+# ---- cxxopts (header-only) ----
+FetchContent_Declare(
+    cxxopts
+    GIT_REPOSITORY https://github.com/jarro2783/cxxopts.git
+    GIT_TAG        v3.1.1
+)
+FetchContent_MakeAvailable(cxxopts)
+
+# ---- spdlog ----
+FetchContent_Declare(
+    spdlog
+    GIT_REPOSITORY https://github.com/gabime/spdlog.git
+    GIT_TAG        v1.13.0
+)
+FetchContent_MakeAvailable(spdlog)
+
+# ---- stb (header-only, system include per evitare warning) ----
 FetchContent_Declare(
     stb
     GIT_REPOSITORY https://github.com/nothings/stb.git
@@ -23,8 +49,18 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(stb)
 
-# --- TARGET DEDICATO PER L'IMPLEMENTAZIONE DI STB ---
-# Generiamo un file sorgente temporaneo per le macro d'implementazione
+# ---- indicators (header-only, progress bar) ----
+FetchContent_Declare(
+    indicators
+    GIT_REPOSITORY https://github.com/p-ranav/indicators.git
+    GIT_TAG        v2.3
+)
+FetchContent_MakeAvailable(indicators)
+
+# ============================================================================
+# Target per implementazione STB
+# ============================================================================
+# Creiamo un file temporaneo con le macro d'implementazione di stb
 set(STB_WRAPPER_SRC "${CMAKE_CURRENT_BINARY_DIR}/stb_impl.cpp")
 file(WRITE "${STB_WRAPPER_SRC}" [[
 #define STB_IMAGE_IMPLEMENTATION
@@ -36,15 +72,18 @@ file(WRITE "${STB_WRAPPER_SRC}" [[
 add_library(stb_impl STATIC "${STB_WRAPPER_SRC}")
 target_include_directories(stb_impl SYSTEM PUBLIC ${stb_SOURCE_DIR})
 
-# Disabilitiamo i warning aggressivi ESCLUSIVAMENTE per il target stb_impl
+# Disabilita warning per stb (codice di terze parti)
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-  target_compile_options(stb_impl PRIVATE
-        -w # Disabilita tutti i warning per l'implementazione stb
-    )
+  target_compile_options(stb_impl PRIVATE -w)
 endif()
-# ---------------------------------------------------
 
-# Definizione Eseguibile Principale
+if(MSVC)
+  target_compile_options(stb_impl PRIVATE /W0)
+endif()
+
+# ============================================================================
+# Target Principale: shrink
+# ============================================================================
 add_executable(shrink
     src/main.cpp
     src/Application.cpp
@@ -53,34 +92,82 @@ add_executable(shrink
 
 target_include_directories(shrink PRIVATE include)
 
-# Warning rigorosi applicati SOLO al tuo codice (shrink)
-target_compile_options(shrink PRIVATE
-    $<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>:
-        -Wall
-        -Wextra
-        -Wpedantic
-        -Wshadow
-        -Wconversion
-        -Werror
-        -fdiagnostics-color=always
-    >
-)
+# ============================================================================
+# Compiler Flags - Warning rigorosi SOLO per il codice del progetto
+# ============================================================================
 
-target_compile_options(shrink PRIVATE
-    $<$<AND:$<CONFIG:Release>,$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>>:
-        -march=native
-    >
-)
+# GCC / Clang
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(shrink PRIVATE
+    -Wall
+    -Wextra
+    -Wpedantic
+    -Wshadow
+    -Wconversion
+    -Werror
+    -fdiagnostics-color=always
+  )
 
-# Linking Librerie
+  # Ottimizzazioni per Release
+  target_compile_options(shrink PRIVATE
+    $<$<CONFIG:Release>:-march=native -O3>
+  )
+
+  # Link statico per MSYS2 / MinGW
+  if(MINGW OR MSYS)
+    target_link_options(shrink PRIVATE
+      -static-libgcc
+      -static-libstdc++
+      -lstdc++exp
+    )
+  endif()
+endif()
+
+# MSVC
+if(MSVC)
+  target_compile_options(shrink PRIVATE
+    /W4
+    /WX
+    /permissive-
+    /std:c++latest
+  )
+
+  # Ottimizzazioni per Release
+  target_compile_options(shrink PRIVATE
+    $<$<CONFIG:Release>:/O2 /Oi>
+  )
+endif()
+
+# Clang-cl (Clang compilato con front-end MSVC)
+if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND MSVC)
+  target_compile_options(shrink PRIVATE
+    -Wall
+    -Wextra
+    -Werror
+  )
+endif()
+
+# ============================================================================
+# Linking delle Dipendenze
+# ============================================================================
 target_link_libraries(shrink PRIVATE
     stb_impl
     cxxopts::cxxopts
     spdlog::spdlog
-    WebP::webp
+    webp
+    indicators::indicators
 )
 
-# Nota: -lstdc++exp va passato tra le link_options/libraries, non tra le compile_options
-if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-  target_link_options(shrink PRIVATE -static-libgcc -static-libstdc++ -lstdc++exp)
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(shrink PRIVATE -Wno-dangling-reference)
+endif()
+
+# ============================================================================
+# Post-Build (Opzionale): Copia configurazione di debug
+# ============================================================================
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  add_custom_command(TARGET shrink POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E echo "Build completed successfully!"
+    COMMAND ${CMAKE_COMMAND} -E echo "Executable: $<TARGET_FILE:shrink>"
+  )
 endif()

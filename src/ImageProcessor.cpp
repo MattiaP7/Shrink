@@ -42,15 +42,15 @@ std::pair<int, int> calculate_target_dimension(int src_w, int src_h,
 std::string_view to_string(CompressionError err) {
   switch (err) {
   case CompressionError::FileNotFound:
-    return "File non trovato";
+    return "File not found";
   case CompressionError::InvalidImage:
-    return "Formato immagine non valido o file corrotto";
+    return "Invalid image format or corrupt file";
   case CompressionError::EncodingFailed:
-    return "Errore durante la codifica WebP";
+    return "Error while encoding WebP";
   case CompressionError::WriteFailed:
-    return "Impossibile scrivere il file compresso su disco";
+    return "Unable to write compressed file to disk";
   }
-  return "Errore sconosciuto";
+  return "Undefined error";
 }
 
 std::expected<CompressionResult, CompressionError>

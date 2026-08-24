@@ -3,7 +3,6 @@
 
 #include <cstdint>
 #include <filesystem>
-#include <optional>
 #include <vector>
 
 #include "Config.hpp"

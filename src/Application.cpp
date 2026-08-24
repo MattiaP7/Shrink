@@ -3,7 +3,6 @@
 
 #include <filesystem>
 #include <fstream>
-#include <iomanip>
 #include <ranges>
 
 #include <spdlog/spdlog.h>
@@ -59,10 +58,14 @@ int Application::run() {
       futures;
   futures.reserve(image_to_process_.size());
 
+  // ProgressBar bar(image_to_process_.size());
+
   for (const auto &img_path : image_to_process_) {
     futures.push_back(pool.enqueue([img_path, cfg = cfg_]() {
-      return ImageProcessor::compress_to_webp(img_path, cfg.quality,
-                                              cfg.max_width, cfg.max_height);
+      auto res = ImageProcessor::compress_to_webp(
+          img_path, cfg.quality, cfg.max_width, cfg.max_height);
+      // bar.tick();
+      return res;
     }));
   }
 
@@ -87,17 +90,18 @@ int Application::run() {
           100.0 * (1.0 - (static_cast<double>(val.compressed_size_bytes) /
                           static_cast<double>(val.original_size_bytes)));
 
+      const std::string filename_str = val.original_path.filename().string();
       spdlog::info(
           "[OK] {} | {:.2f} MB -> {:.2f} MB ({:.1f}% saved) in {:.1f} ms",
-          val.original_path.filename().string(), orig_mb, comp_mb, reduction,
-          val.time_taken_ms);
+          filename_str, orig_mb, comp_mb, reduction, val.time_taken_ms);
 
       total_orig_bytes += val.original_size_bytes;
       total_comp_bytes += val.compressed_size_bytes;
       success_count++;
       successful_results.push_back(val);
     } else {
-      spdlog::error("[FAILED] {}", to_string(res.error()));
+      const auto err_msg = to_string(res.error());
+      spdlog::error("[FAILED] {}", err_msg);
     }
   }
 
