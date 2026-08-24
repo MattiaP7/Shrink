@@ -12,8 +12,18 @@
 #include <utility>
 #include <vector>
 
+/**
+ * @brief Small fixed-size pool of jthread workers for asynchronous jobs.
+ *
+ * Workers drain queued tasks and are stopped automatically when the pool is
+ * destroyed. Tasks already queued are allowed to finish during shutdown.
+ */
 class ThreadPool {
 public:
+  /**
+   * @brief Starts the requested number of worker threads.
+   * @param threads Number of workers to create.
+   */
   explicit ThreadPool(size_t threads = std::thread::hardware_concurrency()) {
     for (size_t i{0}; i < threads; ++i) {
       workers_.emplace_back([this](std::stop_token stop_tok) {
@@ -40,6 +50,14 @@ public:
     }
   }
 
+  /**
+   * @brief Adds a callable to the queue and returns its future result.
+   * @tparam F Callable type.
+   * @tparam Args Callable argument types.
+   * @param f Callable to execute.
+   * @param args Arguments forwarded to the callable.
+   * @return Future containing the callable's return value or exception.
+   */
   template <class F, class... Args>
   auto enqueue(F &&f, Args &&...args)
       -> std::future<typename std::invoke_result<F, Args...>::type> {
@@ -57,6 +75,7 @@ public:
     return res;
   }
 
+  /** @brief Requests worker shutdown and joins all workers. */
   ~ThreadPool() {
     {
       std::unique_lock<std::mutex> lock(queue_mutex_);

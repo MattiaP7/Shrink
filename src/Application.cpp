@@ -7,10 +7,15 @@
 
 #include <spdlog/spdlog.h>
 
+/**
+ * @brief Initializes the application and discovers its input images.
+ * @param config Parsed command-line configuration.
+ */
 Application::Application(Config config) : cfg_(std::move(config)) {
   collect_images();
 }
 
+/** @copydoc Application::is_supported_image */
 bool Application::is_supported_image(const fs::path &path) {
   auto ext = path.extension().string();
   for (auto &c : ext)
@@ -18,6 +23,7 @@ bool Application::is_supported_image(const fs::path &path) {
   return ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".bmp";
 }
 
+/** @copydoc Application::collect_images */
 void Application::collect_images() {
   if (cfg_.is_single_file) {
     if (fs::exists(cfg_.target_path) && fs::is_regular_file(cfg_.target_path) &&
@@ -39,6 +45,7 @@ void Application::collect_images() {
   }
 }
 
+/** @copydoc Application::run */
 int Application::run() {
   if (image_to_process_.empty()) {
     spdlog::warn(
@@ -50,7 +57,8 @@ int Application::run() {
                "(Quality: {})...",
                image_to_process_.size(), cfg_.threads_count, cfg_.quality);
 
-  // start timer benchmark
+  // This measures the complete batch, including worker startup and result
+  // collection.
   const auto start_time = std::chrono::high_resolution_clock::now();
 
   ThreadPool pool(cfg_.threads_count);
@@ -58,13 +66,10 @@ int Application::run() {
       futures;
   futures.reserve(image_to_process_.size());
 
-  // ProgressBar bar(image_to_process_.size());
-
   for (const auto &img_path : image_to_process_) {
     futures.push_back(pool.enqueue([img_path, cfg = cfg_]() {
       auto res = ImageProcessor::compress_to_webp(
           img_path, cfg.quality, cfg.max_width, cfg.max_height);
-      // bar.tick();
       return res;
     }));
   }
@@ -77,7 +82,8 @@ int Application::run() {
   std::vector<CompressionResult> successful_results;
   successful_results.reserve(image_to_process_.size());
 
-  // collecting data & logging
+  // Futures are consumed in submission order; each future still represents a
+  // task that may have completed earlier on any worker.
   for (auto &fut : futures) {
     auto res = fut.get();
     if (res.has_value()) {
@@ -105,7 +111,6 @@ int Application::run() {
     }
   }
 
-  // stop timer benchmark
   const auto end_time = std::chrono::high_resolution_clock::now();
   const auto duration_ms =
       std::chrono::duration<double, std::milli>(end_time - start_time).count();
@@ -113,7 +118,6 @@ int Application::run() {
   print_summary(success_count, image_to_process_.size(), total_orig_bytes,
                 total_comp_bytes);
 
-  // saving benchmark
   if (cfg_.benchmark_export_path.has_value()) {
     export_benchmark_json(*cfg_.benchmark_export_path, successful_results,
                           duration_ms, cfg_.threads_count);
@@ -122,6 +126,7 @@ int Application::run() {
   return 0;
 }
 
+/** @copydoc Application::print_summary */
 void Application::print_summary(size_t success_count, size_t total_count,
                                 uint64_t orig_bytes, uint64_t comp_bytes) {
   if (success_count == 0 || orig_bytes == 0)
@@ -142,6 +147,7 @@ void Application::print_summary(size_t success_count, size_t total_count,
   spdlog::info("Total savings:      {:.2f}%", total_reduction);
 }
 
+/** @copydoc Application::export_benchmark_json */
 void Application::export_benchmark_json(
     const fs::path &export_path, const std::vector<CompressionResult> &results,
     double total_duration_ms, size_t threads_count) {

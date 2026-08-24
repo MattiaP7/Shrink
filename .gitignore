@@ -26,8 +26,11 @@ compile_commands.json
 *.user
 
 # Test file
-*.tsv000
+*.json
+*.png
+!benchmark_charts.png
 unsplash_test_dataset/
+*.tsv000
 
 # OS generated files
 Thumbs.db

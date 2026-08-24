@@ -10,19 +10,35 @@
 
 #include <cxxopts.hpp>
 
+/**
+ * @brief Command-line configuration for a compression run.
+ */
 struct Config {
+  /** @brief Input file or directory selected by the user. */
   std::filesystem::path target_path;
+  /** @brief True when target_path identifies one file rather than a directory.
+   */
   bool is_single_file = false;
+  /** @brief WebP quality in the range 0.0 to 100.0. */
   float quality = 80.0f;
+  /** @brief Number of workers; zero requests automatic detection. */
   std::size_t threads_count = 0;
 
-  // Parametri per il ridimensionamento
+  /** @brief Optional maximum output width while preserving the aspect ratio. */
   std::optional<int> max_width;
+  /** @brief Optional maximum output height while preserving the aspect ratio.
+   */
   std::optional<int> max_height;
 
-  // Benchmark flag
+  /** @brief Optional destination for the detailed benchmark JSON report. */
   std::optional<std::filesystem::path> benchmark_export_path;
 
+  /**
+   * @brief Parses command-line arguments into a validated configuration.
+   * @param argc Argument count received by main().
+   * @param argv Argument values received by main().
+   * @return A configuration, or std::nullopt after help or invalid input.
+   */
   static std::optional<Config> parse(int argc, char *argv[]) {
     cxxopts::Options options(
         "shrink",
@@ -40,7 +56,7 @@ struct Config {
         cxxopts::value<int>())(
         "max-height", "Maximum image height (preserves aspect ratio)",
         cxxopts::value<int>())("h,help", "Print help message")(
-        "benchmark", "Export detailed compression metrics to JSON/CSV",
+        "benchmark", "Export detailed compression metrics to JSON",
         cxxopts::value<std::string>());
 
     try {

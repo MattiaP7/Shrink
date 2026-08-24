@@ -57,6 +57,22 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(indicators)
 
+# ---- easyexif
+FetchContent_Declare(
+    easyexif
+    GIT_REPOSITORY https://github.com/mayanklahiri/easyexif.git
+    GIT_TAG        master
+)
+FetchContent_MakeAvailable(easyexif)
+
+if(NOT TARGET easyexif)
+    add_library(easyexif STATIC
+        ${easyexif_SOURCE_DIR}/exif.cpp
+        ${easyexif_SOURCE_DIR}/exif.h
+    )
+    target_include_directories(easyexif PUBLIC ${easyexif_SOURCE_DIR})
+endif()
+
 # ============================================================================
 # Target per implementazione STB
 # ============================================================================
@@ -156,6 +172,7 @@ target_link_libraries(shrink PRIVATE
     spdlog::spdlog
     webp
     indicators::indicators
+    easyexif
 )
 
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")

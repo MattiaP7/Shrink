@@ -13,9 +13,17 @@
 
 #include <webp/encode.h>
 
+#include <exif.h>
+
 namespace {
-// Internal helper to calculate the new dimensions while maintaining the aspect
-// ratio
+/**
+ * @brief Calculates bounded dimensions without enlarging the source image.
+ * @param src_w Source width in pixels.
+ * @param src_h Source height in pixels.
+ * @param max_w Optional maximum width.
+ * @param max_h Optional maximum height.
+ * @return New dimensions preserving the source aspect ratio.
+ */
 std::pair<int, int> calculate_target_dimension(int src_w, int src_h,
                                                std::optional<int> max_w,
                                                std::optional<int> max_h) {
@@ -39,6 +47,7 @@ std::pair<int, int> calculate_target_dimension(int src_w, int src_h,
 }
 } // namespace
 
+/** @copydoc to_string */
 std::string_view to_string(CompressionError err) {
   switch (err) {
   case CompressionError::FileNotFound:
@@ -49,10 +58,15 @@ std::string_view to_string(CompressionError err) {
     return "Error while encoding WebP";
   case CompressionError::WriteFailed:
     return "Unable to write compressed file to disk";
+  case CompressionError::ReadError:
+    return "Unable to read file";
+  case CompressionError::DecoderError:
+    return "Unable to decode the file";
   }
   return "Undefined error";
 }
 
+/** @copydoc ImageProcessor::compress_to_webp */
 std::expected<CompressionResult, CompressionError>
 ImageProcessor::compress_to_webp(const fs::path &input_path, float quality,
                                  std::optional<int> max_width,
@@ -64,7 +78,8 @@ ImageProcessor::compress_to_webp(const fs::path &input_path, float quality,
   auto start_time = std::chrono::high_resolution_clock::now();
   uint64_t orig_size = fs::file_size(input_path);
 
-  // 1. Decodifica immagine reale (JPG/PNG/BMP) tramite stb_image
+  // Decode to RGBA so every supported input follows the same encoder path,
+  // regardless of its original number of channels.
   int src_w = 0;
   int src_h = 0;
   int channels = 0;
@@ -77,18 +92,16 @@ ImageProcessor::compress_to_webp(const fs::path &input_path, float quality,
     return std::unexpected(CompressionError::InvalidImage);
   }
 
-  // RAII guard
+  // stb_image owns this allocation; the guard releases it on every return path.
   std::unique_ptr<stbi_uc, void (*)(void *)> stbi_guard(raw_pixels,
                                                         stbi_image_free);
 
-  // 2 calcolo dimensioni
   auto [dst_w, dst_h] =
       calculate_target_dimension(src_w, src_h, max_width, max_height);
 
   const stbi_uc *final_pixels = raw_pixels;
   std::vector<stbi_uc> resized_buffer;
 
-  // 3 resize
   if (dst_w != src_w || dst_h != src_h) {
     resized_buffer.resize(
         static_cast<size_t>(dst_w * dst_h * desired_channels));
@@ -103,7 +116,8 @@ ImageProcessor::compress_to_webp(const fs::path &input_path, float quality,
     final_pixels = resized_buffer.data();
   }
 
-  // 4. Codifica in WebP Lossy tramite libwebp
+  // Encode only after resizing, so the requested bounds affect both memory use
+  // and the dimensions stored in the resulting WebP.
   uint8_t *webp_data = nullptr;
   const size_t webp_size =
       WebPEncodeRGBA(final_pixels, dst_w, dst_h, dst_w * desired_channels,
@@ -113,10 +127,9 @@ ImageProcessor::compress_to_webp(const fs::path &input_path, float quality,
     return std::unexpected(CompressionError::EncodingFailed);
   }
 
-  // RAII guard per la memoria allocata da WebPEncode
+  // libwebp allocates the encoded buffer; release it even when writing fails.
   std::unique_ptr<uint8_t, void (*)(void *)> webp_guard(webp_data, WebPFree);
 
-  // 5. Scrittura file di output (.webp)
   fs::path output_path = input_path;
   output_path.replace_extension(".webp");
 
