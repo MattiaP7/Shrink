@@ -2,47 +2,26 @@
 
 A high-performance C++23 CLI tool for multithreaded batch image conversion to WebP format.
 
-## Requirements
+## System Requirements
 
-The project requires a C++23 compliant compiler, CMake 3.25+, Ninja, and MSYS2 UCRT64 environment.
+The project uses **FetchContent** to automatically download and compile all dependencies. You only need:
 
-### Installing Dependencies (MSYS2 UCRT64)
+- **Compiler:** C++23 compliant (GCC 14+, Clang 16+, or MSVC 2022+)
+- **CMake:** Version 3.25 or later
+- **Git:** For cloning the repository (and FetchContent downloads)
 
-Run the following command in the MSYS2 UCRT64 terminal:
+**No manual dependency installation required!** All libraries (libwebp, cxxopts, spdlog, stb, indicators) are automatically fetched and built during the CMake configure step.
 
-```bash
-pacman -S --needed \
-    mingw-w64-ucrt-x86_64-gcc \
-    mingw-w64-ucrt-x86_64-cmake \
-    mingw-w64-ucrt-x86_64-ninja \
-    mingw-w64-ucrt-x86_64-libwebp \
-    mingw-w64-ucrt-x86_64-cxxopts \
-    mingw-w64-ucrt-x86_64-spdlog \
-    git
-```
-
-## Building the Project
-
-1. Clone the repository:
+## Quick Start
 
 ```bash
 git clone <repository_url>
 cd shrink
-```
-
-2. Configure CMake:
-
-```bash
-cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-```
-
-3. Build:
-
-```bash
+cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ```
 
-The output executable `shrink.exe` will be located in the `build/` directory.
+The executable will be in `build/shrink.exe` (Windows) or `build/shrink` (Linux/macOS).
 
 ## Usage
 
@@ -118,3 +97,89 @@ The results demonstrate **solid, production-ready performance:**
 3. **Consistent Compression:** A 52.4% average reduction in file size is excellent for lossy WebP compression at quality level 80, balancing visual fidelity with storage savings.
 
 4. **Heterogeneous Handling:** The tool gracefully handles images of varying resolutions and complexity, adapting processing time accordingly without performance degradation.
+
+### Real-World Applicability
+
+For typical batch operations:
+
+- **500 images:** ~116 seconds (~2 minutes)
+- **1000 images:** ~232 seconds (~3.9 minutes)
+- **5000 images:** ~19.3 minutes
+
+## Options
+
+- `-d, --directory <path>`: Path to the directory containing images (required).
+- `-q, --quality <float>`: Compression quality from 0.0 to 100.0 (default: 80.0).
+- `-t, --threads <size_t>`: Number of threads to use, 0 for auto-detect (default: 0).
+- `-h, --help`: Display help message.
+
+## TODO - Planned Features
+
+### 1. Recursive Directory Processing
+
+**Description:** Currently, the CLI only scans the specified directory. A professional tool should process entire directory hierarchies while preserving the folder structure in the output.
+
+**Implementation Details:**
+
+- Replace `fs::directory_iterator` with `fs::recursive_directory_iterator` (C++23)
+- Support custom output directory to avoid overwriting source files
+
+**Proposed CLI Flags:**
+
+```bash
+-r, --recursive
+--out-dir <output_path>
+```
+
+---
+
+### 2. EXIF Metadata Preservation
+
+**Description:** When decoding JPEG with `stb_image` and encoding to WebP, EXIF metadata (orientation, date, GPS) is lost. This frequently causes images captured on smartphones to appear rotated 90°.
+
+**Implementation Details:**
+
+- Extract EXIF headers from source image before re-encoding
+- Apply correct rotation to pixels or embed metadata in WebP chunk
+- Consider using a lightweight EXIF library or manual header parsing
+
+**Key Concerns:**
+
+- Orientation correction (EXIF tag 274)
+- Preserve timestamp and GPS data when available
+
+---
+
+### 3. Dry-Run Mode & Compression Presets
+
+**Description:** Allow users to simulate operations or choose predefined compression profiles without modifying files on disk.
+
+**Implementation Details:**
+
+- Scan directory and estimate processing time and file savings without writing
+- Provide preset profiles mapping quality and resize parameters
+
+**Proposed CLI Flags:**
+
+```bash
+--dry-run                           # Simulate without writing
+--preset [web|archive|lossless]     # Predefined compression profiles
+```
+
+**Preset Examples:**
+
+- `web`: quality 75, max-width 1920, max-height 1080
+- `archive`: quality 90, no resize (lossless compression focus)
+- `lossless`: WebP lossless mode, no resize
+
+---
+
+### 5. Progress Bar & Detailed Statistics (Future Enhancement)
+
+**Description:** Display real-time progress, compression ratio, and time estimates.
+
+**Potential Implementation:**
+
+- Integration with `spdlog` for structured logging
+- Live percentage, current file, estimated time remaining
+- Summary statistics (total bytes saved, average compression ratio)
