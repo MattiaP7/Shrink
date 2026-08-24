@@ -20,6 +20,9 @@ struct Config {
   std::optional<int> max_width;
   std::optional<int> max_height;
 
+  // Benchmark flag
+  std::optional<std::filesystem::path> benchmark_export_path;
+
   static std::optional<Config> parse(int argc, char *argv[]) {
     cxxopts::Options options(
         "shrink",
@@ -36,7 +39,9 @@ struct Config {
         "max-width", "Maximum image width (preserves aspect ratio)",
         cxxopts::value<int>())(
         "max-height", "Maximum image height (preserves aspect ratio)",
-        cxxopts::value<int>())("h,help", "Print help message");
+        cxxopts::value<int>())("h,help", "Print help message")(
+        "benchmark", "Export detailed compression metrics to JSON/CSV",
+        cxxopts::value<std::string>());
 
     try {
       auto result = options.parse(argc, argv);
@@ -78,6 +83,9 @@ struct Config {
       if (result.count("max-height")) {
         cfg.max_height = result["max-height"].as<int>();
       }
+
+      if (result.count("benchmark"))
+        cfg.benchmark_export_path = result["benchmark"].as<std::string>();
 
       return cfg;
     } catch (const cxxopts::exceptions::exception &e) {

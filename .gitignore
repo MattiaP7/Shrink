@@ -25,6 +25,10 @@ compile_commands.json
 .clang-format-ignore
 *.user
 
+# Test file
+*.tsv000
+unsplash_test_dataset/
+
 # OS generated files
 Thumbs.db
 [Dd]esktop.ini

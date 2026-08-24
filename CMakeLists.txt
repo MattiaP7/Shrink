@@ -38,7 +38,7 @@ target_include_directories(stb_impl SYSTEM PUBLIC ${stb_SOURCE_DIR})
 
 # Disabilitiamo i warning aggressivi ESCLUSIVAMENTE per il target stb_impl
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-    target_compile_options(stb_impl PRIVATE
+  target_compile_options(stb_impl PRIVATE
         -w # Disabilita tutti i warning per l'implementazione stb
     )
 endif()
@@ -47,6 +47,7 @@ endif()
 # Definizione Eseguibile Principale
 add_executable(shrink
     src/main.cpp
+    src/Application.cpp
     src/ImageProcessor.cpp
 )
 
@@ -81,5 +82,5 @@ target_link_libraries(shrink PRIVATE
 
 # Nota: -lstdc++exp va passato tra le link_options/libraries, non tra le compile_options
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    target_link_options(shrink PRIVATE -static-libgcc -static-libstdc++ -lstdc++exp)
+  target_link_options(shrink PRIVATE -static-libgcc -static-libstdc++ -lstdc++exp)
 endif()

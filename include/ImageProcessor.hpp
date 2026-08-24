@@ -22,6 +22,8 @@ struct CompressionResult {
   uint64_t original_size_bytes;
   uint64_t compressed_size_bytes;
   double time_taken_ms;
+  int width{0};
+  int height{0};
 };
 
 std::string_view to_string(CompressionError err);
