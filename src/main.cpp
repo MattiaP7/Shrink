@@ -1,83 +1,80 @@
 #include <filesystem>
-#include <iostream>
 #include <ranges>
 #include <vector>
 
-#include <cxxopts.hpp>
 #include <spdlog/spdlog.h>
 
+#include "../include/Config.hpp"
 #include "../include/ImageProcessor.hpp"
 #include "../include/ThreadPool.hpp"
 
 namespace fs = std::filesystem;
 
 int main(int argc, char *argv[]) {
-
-  cxxopts::Options options("shrink", "Ultra-efficient C++23 CLI for batch "
-                                     "image compression to WebP");
-
-  options.add_options()("d,directory", "Directory containing the images",
-                        cxxopts::value<std::string>())(
-      "q,quality", "Compression quality (0.0 - 100.0)",
-      cxxopts::value<float>()->default_value("80.0"))(
-      "t,threads", "Number of threads (0 for auto-detect)",
-      cxxopts::value<size_t>()->default_value("0"))("h,help",
-                                                    "Print help message");
-
-  auto result = options.parse(argc, argv);
-
-  if (result.count("help") || !result.count("directory")) {
-    std::cout << options.help() << "\n";
-    return 0;
+  auto config_opt = Config::parse(argc, argv);
+  if (!config_opt.has_value()) {
+    return 0; // Help stampato o errore nei flag
   }
 
-  fs::path target_dir = result["directory"].as<std::string>();
-  float quality = result["quality"].as<float>();
-  size_t threads_count = result["threads"].as<size_t>();
+  const Config cfg = *config_opt;
 
-  if (threads_count == 0) {
-    threads_count = std::thread::hardware_concurrency();
-  }
+  std::vector<fs::path> images_to_process;
 
-  if (!fs::is_directory(target_dir)) {
-    spdlog::error("Error: The path '{}' is not a valid directory.",
-                  target_dir.string());
-    return 1;
-  }
-
-  // Filter supported extensions
-  auto is_supported_image = [](const fs::directory_entry &entry) {
-    if (!entry.is_regular_file())
-      return false;
-    auto ext = entry.path().extension().string();
-    for (auto &c : ext)
+  auto is_supported_image = [](const fs::path &path) {
+    auto ext = path.extension().string();
+    for (auto &c : ext) {
       c = static_cast<char>(std::tolower(c));
+    }
     return ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".bmp";
   };
 
-  std::vector<fs::path> images_to_process;
-  for (const auto &entry : fs::directory_iterator(target_dir) |
-                               std::views::filter(is_supported_image)) {
-    images_to_process.push_back(entry.path());
+  if (cfg.is_single_file) {
+    if (!fs::exists(cfg.target_path) || !fs::is_regular_file(cfg.target_path)) {
+      spdlog::error("Error: The path '{}' is not a valid file.",
+                    cfg.target_path.string());
+      return 1;
+    }
+    if (!is_supported_image(cfg.target_path)) {
+      spdlog::error("Error: Unsupported image extension for file '{}'.",
+                    cfg.target_path.string());
+      return 1;
+    }
+    images_to_process.push_back(cfg.target_path);
+  } else {
+    if (!fs::exists(cfg.target_path) || !fs::is_directory(cfg.target_path)) {
+      spdlog::error("Error: The path '{}' is not a valid directory.",
+                    cfg.target_path.string());
+      return 1;
+    }
+
+    auto is_supported_entry = [&](const fs::directory_entry &entry) {
+      return entry.is_regular_file() && is_supported_image(entry.path());
+    };
+
+    for (const auto &entry : fs::directory_iterator(cfg.target_path) |
+                                 std::views::filter(is_supported_entry)) {
+      images_to_process.push_back(entry.path());
+    }
   }
 
   if (images_to_process.empty()) {
-    spdlog::warn("No supported images (.png, .jpg, .jpeg, .bmp) found in the "
-                 "directory.");
+    spdlog::warn(
+        "No supported images (.png, .jpg, .jpeg, .bmp) found to process.");
     return 0;
   }
 
-  spdlog::info(
-      "Found {} images. Starting processing with {} threads (Quality: {})...",
-      images_to_process.size(), threads_count, quality);
+  spdlog::info("Found {} image(s). Starting processing with {} thread(s) "
+               "(Quality: {})...",
+               images_to_process.size(), cfg.threads_count, cfg.quality);
 
-  ThreadPool pool(threads_count);
+  ThreadPool pool(cfg.threads_count);
   std::vector<std::future<std::expected<CompressionResult, CompressionError>>>
       futures;
 
   for (const auto &img_path : images_to_process) {
-    futures.push_back(pool.enqueue([img_path, quality]() {
-      return ImageProcessor::compress_to_webp(img_path, quality);
+    futures.push_back(pool.enqueue([img_path, cfg]() {
+      return ImageProcessor::compress_to_webp(img_path, cfg.quality,
+                                              cfg.max_width, cfg.max_height);
     }));
   }
 

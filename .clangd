@@ -1,0 +1,15 @@
+CompileFlags:
+  Add: [
+    -std=c++23,
+    -Wall,
+    -Wextra,
+    -Wpedantic,
+    -Wshadow,
+    -Werror,
+    -Wconversion,
+    -march=native,
+    -pthread,
+    --target=x86_64-w64-mingw32
+  ]
+  Compiler: D:/msys64/ucrt64/bin/g++.exe
+  

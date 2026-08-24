@@ -1,19 +1,43 @@
 #include "../include/ImageProcessor.hpp"
+
+#include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <fstream>
+#include <memory>
+#include <utility>
+#include <vector>
 
-// Disabilitiamo temporaneamente i warning per la libreria esterna stb_image
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wconversion"
-#pragma GCC diagnostic ignored "-Wshadow"
-#pragma GCC diagnostic ignored "-Wpedantic"
-
-#define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
-
-#pragma GCC diagnostic pop
+#include <stb_image_resize2.h>
 
 #include <webp/encode.h>
+
+namespace {
+// Internal helper to calculate the new dimensions while maintaining the aspect
+// ratio
+std::pair<int, int> calculate_target_dimension(int src_w, int src_h,
+                                               std::optional<int> max_w,
+                                               std::optional<int> max_h) {
+  if (!max_w.has_value() && !max_h.has_value())
+    return {src_w, src_h};
+
+  double scale_w =
+      max_w.has_value() ? static_cast<double>(*max_w) / src_w : 1.0;
+  double scale_h =
+      max_h.has_value() ? static_cast<double>(*max_h) / src_h : 1.0;
+
+  double scale = std::min(scale_w, scale_h);
+
+  if (scale >= 1.0)
+    return {src_w, src_h};
+
+  int dst_w = static_cast<int>(std::round(src_w * scale));
+  int dst_h = static_cast<int>(std::round(src_h * scale));
+
+  return {std::max(1, dst_w), std::max(1, dst_h)};
+}
+} // namespace
 
 std::string_view to_string(CompressionError err) {
   switch (err) {
@@ -30,7 +54,9 @@ std::string_view to_string(CompressionError err) {
 }
 
 std::expected<CompressionResult, CompressionError>
-ImageProcessor::compress_to_webp(const fs::path &input_path, float quality) {
+ImageProcessor::compress_to_webp(const fs::path &input_path, float quality,
+                                 std::optional<int> max_width,
+                                 std::optional<int> max_height) {
   if (!fs::exists(input_path)) {
     return std::unexpected(CompressionError::FileNotFound);
   }
@@ -39,42 +65,75 @@ ImageProcessor::compress_to_webp(const fs::path &input_path, float quality) {
   uint64_t orig_size = fs::file_size(input_path);
 
   // 1. Decodifica immagine reale (JPG/PNG/BMP) tramite stb_image
-  int width = 0, height = 0, channels = 0;
-  stbi_uc *raw_pixels = stbi_load(input_path.string().c_str(), &width, &height,
-                                  &channels, 4); // Forziamo RGBA (4 canali)
+  int src_w = 0;
+  int src_h = 0;
+  int channels = 0;
+  constexpr int desired_channels = 4;
+
+  stbi_uc *raw_pixels = stbi_load(input_path.string().c_str(), &src_w, &src_h,
+                                  &channels, desired_channels);
 
   if (!raw_pixels) {
     return std::unexpected(CompressionError::InvalidImage);
   }
 
-  // 2. Codifica in WebP Lossy usando libwebp
-  uint8_t *webp_data = nullptr;
-  size_t webp_size =
-      WebPEncodeRGBA(raw_pixels, width, height, width * 4, quality, &webp_data);
+  // RAII guard
+  std::unique_ptr<stbi_uc, void (*)(void *)> stbi_guard(raw_pixels,
+                                                        stbi_image_free);
 
-  // Libera subito la memoria pixel grezza
-  stbi_image_free(raw_pixels);
+  // 2 calcolo dimensioni
+  auto [dst_w, dst_h] =
+      calculate_target_dimension(src_w, src_h, max_width, max_height);
+
+  const stbi_uc *final_pixels = raw_pixels;
+  std::vector<stbi_uc> resized_buffer;
+
+  // 3 resize
+  if (dst_w != src_w || dst_h != src_h) {
+    resized_buffer.resize(
+        static_cast<size_t>(dst_w * dst_h * desired_channels));
+
+    stbi_uc *res = stbir_resize_uint8_linear(raw_pixels, src_w, src_h, 0,
+                                             resized_buffer.data(), dst_w,
+                                             dst_h, 0, STBIR_RGBA);
+
+    if (!res)
+      return std::unexpected(CompressionError::EncodingFailed);
+
+    final_pixels = resized_buffer.data();
+  }
+
+  // 4. Codifica in WebP Lossy tramite libwebp
+  uint8_t *webp_data = nullptr;
+  const size_t webp_size =
+      WebPEncodeRGBA(final_pixels, dst_w, dst_h, dst_w * desired_channels,
+                     quality, &webp_data);
 
   if (webp_size == 0) {
     return std::unexpected(CompressionError::EncodingFailed);
   }
 
-  // 3. Salva file di output (.webp)
+  // RAII guard per la memoria allocata da WebPEncode
+  std::unique_ptr<uint8_t, void (*)(void *)> webp_guard(webp_data, WebPFree);
+
+  // 5. Scrittura file di output (.webp)
   fs::path output_path = input_path;
   output_path.replace_extension(".webp");
 
   std::ofstream out_file(output_path, std::ios::binary);
   if (!out_file) {
-    WebPFree(webp_data);
     return std::unexpected(CompressionError::WriteFailed);
   }
 
   out_file.write(reinterpret_cast<const char *>(webp_data),
-                 static_cast<long long>(webp_size));
-  WebPFree(webp_data);
+                 static_cast<std::streamsize>(webp_size));
 
-  auto end_time = std::chrono::high_resolution_clock::now();
-  double elapsed_ms =
+  if (!out_file.good()) {
+    return std::unexpected(CompressionError::WriteFailed);
+  }
+
+  const auto end_time = std::chrono::high_resolution_clock::now();
+  const double elapsed_ms =
       std::chrono::duration<double, std::milli>(end_time - start_time).count();
 
   return CompressionResult{.original_path = input_path,

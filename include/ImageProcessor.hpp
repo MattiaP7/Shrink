@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <expected>
 #include <filesystem>
+#include <optional>
 #include <string_view>
 
 namespace fs = std::filesystem;
@@ -28,7 +29,9 @@ std::string_view to_string(CompressionError err);
 class ImageProcessor {
 public:
   static std::expected<CompressionResult, CompressionError>
-  compress_to_webp(const fs::path &input_path, float quality = 80.0f);
+  compress_to_webp(const fs::path &input_path, float quality = 80.0f,
+                   std::optional<int> max_width = std::nullopt,
+                   std::optional<int> max_height = std::nullopt);
 };
 
 #endif
