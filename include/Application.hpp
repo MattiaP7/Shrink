@@ -1,6 +1,6 @@
 /**
  * @file Application.hpp
- * @author Mattia Pirazzi (7mattiapirazzi@gmail.com)
+ * @author Mattia Pirazzi
  * @brief Declares the Application class, which orchestrates image discovery,
  * compression, and reporting.
  * @version 0.1
