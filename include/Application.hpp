@@ -77,10 +77,16 @@ private:
                         double total_duration_ms, size_t threads_count);
 
   /**
-   * @brief
+   * @brief Computes the target WebP destination path for a given input file.
    *
-   * @param path
-   * @return fs::path
+   * Resolves the output destination based on current CLI options
+   * (`output_path`, `is_single_file`, and `recursive`). Handles direct output
+   * directory mapping, single-file overrides, and relative directory structure
+   * replication when processing directories recursively.
+   *
+   * @param input_file Path to the input image file to be processed.
+   * @return std::filesystem::path The resolved target file path with `.webp`
+   * extension.
    */
-  fs::path compute_output_path(const fs::path &input_file) const;
+  [[nodiscard]] fs::path compute_output_path(const fs::path &input_file) const;
 };
