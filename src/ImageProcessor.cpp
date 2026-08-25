@@ -68,8 +68,9 @@ std::string_view to_string(CompressionError err) {
 
 /** @copydoc ImageProcessor::compress_to_webp */
 std::expected<CompressionResult, CompressionError>
-ImageProcessor::compress_to_webp(const fs::path &input_path, float quality,
-                                 std::optional<int> max_width,
+ImageProcessor::compress_to_webp(const std::filesystem::path &input_path,
+                                 const std::filesystem::path &output_path,
+                                 float quality, std::optional<int> max_width,
                                  std::optional<int> max_height) {
   if (!fs::exists(input_path)) {
     return std::unexpected(CompressionError::FileNotFound);
@@ -129,9 +130,6 @@ ImageProcessor::compress_to_webp(const fs::path &input_path, float quality,
 
   // libwebp allocates the encoded buffer; release it even when writing fails.
   std::unique_ptr<uint8_t, void (*)(void *)> webp_guard(webp_data, WebPFree);
-
-  fs::path output_path = input_path;
-  output_path.replace_extension(".webp");
 
   std::ofstream out_file(output_path, std::ios::binary);
   if (!out_file) {

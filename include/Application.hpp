@@ -9,8 +9,7 @@
  * @copyright Copyright (c) 2026 Shrink Project. Licensed under the MIT License.
  *
  */
-#ifndef APPLICATION_HPP
-#define APPLICATION_HPP
+#pragma once
 
 #include <cstdint>
 #include <filesystem>
@@ -76,6 +75,12 @@ private:
   export_benchmark_json(const fs::path &export_path,
                         const std::vector<CompressionResult> &results,
                         double total_duration_ms, size_t threads_count);
-};
 
-#endif
+  /**
+   * @brief
+   *
+   * @param path
+   * @return fs::path
+   */
+  fs::path compute_output_path(const fs::path &input_file) const;
+};

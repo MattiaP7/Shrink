@@ -1,5 +1,4 @@
-#ifndef IMAGE_PROCESSOR_HPP
-#define IMAGE_PROCESSOR_HPP
+#pragma once
 
 #include <cstdint>
 #include <expected>
@@ -57,10 +56,10 @@ public:
    * @param max_height Optional maximum height; aspect ratio is preserved.
    * @return Compression metrics, or the reason the operation failed.
    */
+  // ImageProcessor.hpp
   static std::expected<CompressionResult, CompressionError>
-  compress_to_webp(const fs::path &input_path, float quality = 80.0f,
+  compress_to_webp(const std::filesystem::path &input_path,
+                   const std::filesystem::path &output_path, float quality,
                    std::optional<int> max_width = std::nullopt,
                    std::optional<int> max_height = std::nullopt);
 };
-
-#endif

@@ -23,25 +23,67 @@ bool Application::is_supported_image(const fs::path &path) {
   return ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".bmp";
 }
 
+fs::path Application::compute_output_path(const fs::path &input_file) const {
+  if (!cfg_.output_path.has_value()) {
+    auto out = input_file;
+    return out.replace_extension(".webp");
+  }
+
+  const auto &base_out = *cfg_.output_path;
+  if (cfg_.is_single_file) {
+    // if output is an existing directory, the file will go there
+    if (fs::is_directory(base_out) || base_out.extension().empty()) {
+      fs::create_directory(base_out);
+      return (base_out / input_file.filename()).replace_extension(".webp");
+    }
+    // Otherwise it is an explicit file destination path
+    return base_out;
+  }
+
+  // scan directory (recursive or not)
+  fs::path relative = fs::relative(input_file, cfg_.target_path);
+  fs::path destination = (base_out / relative).replace_extension(".webp");
+
+  fs::create_directory(destination.parent_path());
+  return destination;
+}
+
 /** @copydoc Application::collect_images */
 void Application::collect_images() {
+  image_to_process_.clear();
+
+  // 1. single file case
   if (cfg_.is_single_file) {
     if (fs::exists(cfg_.target_path) && fs::is_regular_file(cfg_.target_path) &&
-        is_supported_image(cfg_.target_path))
+        is_supported_image(cfg_.target_path)) {
       image_to_process_.push_back(cfg_.target_path);
+    }
     return;
   }
 
-  if (!fs::exists(cfg_.target_path) || !fs::is_directory(cfg_.target_path))
+  // 2. directory
+  if (!fs::exists(cfg_.target_path) || !fs::is_directory(cfg_.target_path)) {
+    spdlog::error("Input directory does not exists: {}",
+                  cfg_.target_path.string());
     return;
+  }
 
   auto is_supported_entry = [](const fs::directory_entry &entry) {
     return entry.is_regular_file() && is_supported_image(entry.path());
   };
 
-  for (const auto &entry : fs::directory_iterator(cfg_.target_path) |
-                               std::views::filter(is_supported_entry)) {
-    image_to_process_.push_back(entry.path());
+  // 3. recursive scan or not
+  if (cfg_.recursive) {
+    for (const auto &entry :
+         fs::recursive_directory_iterator(cfg_.target_path) |
+             std::views::filter(is_supported_entry)) {
+      image_to_process_.push_back(entry.path());
+    }
+  } else {
+    for (const auto &entry : fs::directory_iterator(cfg_.target_path) |
+                                 std::views::filter(is_supported_entry)) {
+      image_to_process_.push_back(entry.path());
+    }
   }
 }
 
@@ -67,10 +109,11 @@ int Application::run() {
   futures.reserve(image_to_process_.size());
 
   for (const auto &img_path : image_to_process_) {
-    futures.push_back(pool.enqueue([img_path, cfg = cfg_]() {
-      auto res = ImageProcessor::compress_to_webp(
-          img_path, cfg.quality, cfg.max_width, cfg.max_height);
-      return res;
+    fs::path out_path = compute_output_path(img_path);
+
+    futures.push_back(pool.enqueue([img_path, out_path, cfg = cfg_]() {
+      return ImageProcessor::compress_to_webp(img_path, out_path, cfg.quality,
+                                              cfg.max_width, cfg.max_height);
     }));
   }
 

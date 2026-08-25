@@ -1,5 +1,4 @@
-#ifndef THREAD_POOL_HPP
-#define THREAD_POOL_HPP
+#pragma once
 
 #include <condition_variable>
 #include <functional>
@@ -92,5 +91,3 @@ private:
   std::queue<std::function<void()>> tasks_{};
   std::condition_variable cv_{};
 };
-
-#endif
