@@ -67,7 +67,7 @@ This benchmark was conducted on a real-world dataset with the following specific
 
 ### Analysis
 
-![Benchmark Charts](./benchmark_charts.png)
+![Benchmark Charts](output/benchmark_charts.png)
 
 **Left Chart: Processing Time per File**
 
